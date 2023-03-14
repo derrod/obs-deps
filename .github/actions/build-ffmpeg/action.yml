@@ -21,7 +21,7 @@ runs:
   steps:
     - name: Environment Setup
       id: ffmpeg-env-setup
-      shell: wsl-bash {0}
+      shell: wsl-zsh {0}
       run: |
         case "${{ runner.os }}" in
           Linux)
