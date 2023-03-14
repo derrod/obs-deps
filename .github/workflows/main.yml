@@ -41,6 +41,11 @@ jobs:
           wsl-shell-command: 'zsh'
           additional-packages:
             zsh
+            python3-pip
+            build-essential
+            clang-format
+            jq
+            cmake
 
       - name: Setup Environment
         id: setup
