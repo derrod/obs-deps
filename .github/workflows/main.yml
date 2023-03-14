@@ -38,6 +38,7 @@ jobs:
       - uses: Vampire/setup-wsl@v2
         with:
           distribution: Ubuntu-22.04
+          wsl-shell-command: 'zsh'
           additional-packages:
             zsh
 

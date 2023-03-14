@@ -55,7 +55,7 @@ runs:
 
     - name: Build and Install FFmpeg Dependencies
       if: ${{ steps.ffmpeg-deps-cache.outputs.cache-hit != 'true' }}
-      shell: wsl-bash -c "zsh {0}"
+      shell: wsl-zsh
       run: ./build-ffmpeg.zsh '*~ffmpeg' --target ${{ inputs.target }} --config ${{ inputs.config }} --${{ inputs.type }}
 
     - name: Restore FFmpeg from Cache
@@ -69,10 +69,10 @@ runs:
 
     - name: Install FFmpeg
       if: ${{ steps.ffmpeg-cache.outputs.cache-hit == 'true' }}
-      shell: wsl-bash -c "zsh {0}"
+      shell: wsl-zsh
       run: ./build-ffmpeg.zsh --skip-build --skip-unpack --target ${{ inputs.target }} --config ${{ inputs.config }} --${{ inputs.type }}
 
     - name: Build and Install FFmpeg
       if: ${{ steps.ffmpeg-cache.outputs.cache-hit != 'true' }}
-      shell: wsl-bash -c "zsh {0}"
+      shell: wsl-zsh
       run: ./build-ffmpeg.zsh --target ${{ inputs.target }} --config ${{ inputs.config }} --${{ inputs.type }}
