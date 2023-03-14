@@ -21,7 +21,7 @@ runs:
   steps:
     - name: Environment Setup
       id: ffmpeg-env-setup
-      shell: bash
+      shell: wsl-bash {0}
       run: |
         case "${{ runner.os }}" in
           Linux)
@@ -36,7 +36,7 @@ runs:
             fi
         esac
 
-        ffmpeg_dep_hash=$(cat ${{ github.workspace }}/deps.ffmpeg/*.zsh | sha256sum | cut -d " " -f 1)
+        ffmpeg_dep_hash=$(cat ${GITHUB_WORKSPACE}/deps.ffmpeg/*.zsh | sha256sum | cut -d " " -f 1)
         echo "hash=${ffmpeg_dep_hash}" >> $GITHUB_OUTPUT
 
     - name: Restore FFmpeg Dependencies from Cache
@@ -55,7 +55,7 @@ runs:
 
     - name: Build and Install FFmpeg Dependencies
       if: ${{ steps.ffmpeg-deps-cache.outputs.cache-hit != 'true' }}
-      shell: zsh {0}
+      shell: wsl-bash -c "zsh {0}"
       run: ./build-ffmpeg.zsh '*~ffmpeg' --target ${{ inputs.target }} --config ${{ inputs.config }} --${{ inputs.type }}
 
     - name: Restore FFmpeg from Cache
@@ -69,10 +69,10 @@ runs:
 
     - name: Install FFmpeg
       if: ${{ steps.ffmpeg-cache.outputs.cache-hit == 'true' }}
-      shell: zsh {0}
+      shell: wsl-bash -c "zsh {0}"
       run: ./build-ffmpeg.zsh --skip-build --skip-unpack --target ${{ inputs.target }} --config ${{ inputs.config }} --${{ inputs.type }}
 
     - name: Build and Install FFmpeg
       if: ${{ steps.ffmpeg-cache.outputs.cache-hit != 'true' }}
-      shell: zsh {0}
+      shell: wsl-bash -c "zsh {0}"
       run: ./build-ffmpeg.zsh --target ${{ inputs.target }} --config ${{ inputs.config }} --${{ inputs.type }}
