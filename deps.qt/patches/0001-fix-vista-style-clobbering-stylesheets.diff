@@ -1,0 +1,163 @@
+From 0117d4af00781f043bdf9753eddc66eab8ca2803 Mon Sep 17 00:00:00 2001
+From: Santhosh Kumar <santhosh.kumar.selvaraj@qt.io>
+Date: Thu, 03 Aug 2023 10:47:14 +0200
+Subject: [PATCH] Reset palette resolve mask in windows vista style
+
+The palette set by windows vista style during polish doesn't allow style-
+sheet style to override it.
+
+This patch reset resolve mask for the palette set by windows vista style
+and thus it can be overridden.
+
+Fixes: QTBUG-115511
+Pick-to: 6.6 6.5
+Change-Id: Ifcaf441f806cfa0273599b3dce83fdfaec3f5a66
+---
+
+diff --git a/src/plugins/styles/windowsvista/qwindowsvistastyle.cpp b/src/plugins/styles/windowsvista/qwindowsvistastyle.cpp
+index f94e782..2fb1d1b 100644
+--- a/src/plugins/styles/windowsvista/qwindowsvistastyle.cpp
++++ b/src/plugins/styles/windowsvista/qwindowsvistastyle.cpp
+@@ -4664,6 +4664,7 @@
+             QPalette pal = widget->palette();
+             pal.setColor(QPalette::ButtonText, QColor(21, 28, 85));
+             pal.setColor(QPalette::BrightText, QColor(7, 64, 229));
++            pal.setResolveMask(0);
+             widget->setPalette(pal);
+         }
+ #endif // QT_CONFIG(commandlinkbutton)
+@@ -4677,6 +4678,7 @@
+                 QColor textColor = QColor::fromRgb(bgRef);
+                 QPalette pal;
+                 pal.setColor(QPalette::All, QPalette::ToolTipText, textColor);
++                pal.setResolveMask(0);
+                 widget->setPalette(pal);
+             }
+         } else if (qobject_cast<QMessageBox *> (widget)) {
+diff --git a/src/widgets/kernel/qapplication.cpp b/src/widgets/kernel/qapplication.cpp
+index 8b6adc0..2ccf7fa 100644
+--- a/src/widgets/kernel/qapplication.cpp
++++ b/src/widgets/kernel/qapplication.cpp
+@@ -496,8 +496,11 @@
+ void qt_init_tooltip_palette()
+ {
+ #if QT_CONFIG(tooltip)
+-    if (const QPalette *toolTipPalette = QGuiApplicationPrivate::platformTheme()->palette(QPlatformTheme::ToolTipPalette))
+-        QToolTip::setPalette(*toolTipPalette);
++    if (const QPalette *toolTipPalette = QGuiApplicationPrivate::platformTheme()->palette(QPlatformTheme::ToolTipPalette)) {
++        QPalette toolTipPal = *toolTipPalette;
++        toolTipPal.setResolveMask(0);
++        QToolTip::setPalette(toolTipPal);
++    }
+ #endif
+ }
+ 
+diff --git a/tests/auto/widgets/styles/qstylesheetstyle/tst_qstylesheetstyle.cpp b/tests/auto/widgets/styles/qstylesheetstyle/tst_qstylesheetstyle.cpp
+index ef26351..6187bd8 100644
+--- a/tests/auto/widgets/styles/qstylesheetstyle/tst_qstylesheetstyle.cpp
++++ b/tests/auto/widgets/styles/qstylesheetstyle/tst_qstylesheetstyle.cpp
+@@ -94,6 +94,7 @@
+     void proxyStyle();
+     void dialogButtonBox();
+     void emptyStyleSheet();
++    void toolTip_data();
+     void toolTip();
+     void embeddedFonts();
+     void opaquePaintEvent_data();
+@@ -1658,19 +1659,32 @@
+     const QString m_oldStyleName;
+ };
+ 
++void tst_QStyleSheetStyle::toolTip_data()
++{
++    QTest::addColumn<QString>("style");
++
++    QTest::newRow("fusion") << QString("Fusion");
++#ifdef Q_OS_WINDOWS
++    QTest::newRow("windowsvista") << QString("WindowsVista");
++#endif
++}
++
+ void tst_QStyleSheetStyle::toolTip()
+ {
++    QFETCH(QString, style);
++
+     if (QGuiApplication::platformName().startsWith(QLatin1String("wayland"), Qt::CaseInsensitive))
+         QSKIP("Wayland: This fails. Figure out why.");
+ 
+-    qApp->setStyleSheet(QString());
+     QWidget w;
+     w.resize(m_testSize);
+     w.setWindowTitle(QTest::currentTestFunction());
++
+     // Use "Fusion" to prevent the Vista style from clobbering the tooltip palette in polish().
+-    QStyle *fusionStyle = QStyleFactory::create(QLatin1String("Fusion"));
+-    QVERIFY(fusionStyle);
+-    ApplicationStyleSetter as(fusionStyle);
++    QStyle *appStyle = QStyleFactory::create(style);
++    QVERIFY(appStyle);
++    ApplicationStyleSetter as(appStyle);
++
+     QHBoxLayout layout(&w);
+     w.setLayout(&layout);
+ 
+@@ -1698,23 +1712,34 @@
+     wid4->setToolTip("this is wid4");
+     wid4->setObjectName("wid4");
+ 
++    QWidget *wid5 = new QPushButton("wid5", &w);
++    layout.addWidget(wid5);
++    wid5->setStyleSheet("QToolTip { background: #ff0; color: #f00 }");
++    wid5->setToolTip("this is wid5");
++    wid5->setObjectName("wid5");
++
+     centerOnScreen(&w);
+     w.show();
+     QApplicationPrivate::setActiveWindow(&w);
+     QVERIFY(QTest::qWaitForWindowActive(&w));
+ 
+-    const QColor normalToolTip = QToolTip::palette().color(QPalette::Inactive, QPalette::ToolTipBase);
++    QColor normalToolTipBgColor = QToolTip::palette().color(QPalette::Inactive, QPalette::ToolTipBase);
++    QColor normalToolTipFgColor = QToolTip::palette().color(QPalette::Inactive, QPalette::ToolTipText);
++
+     // Tooltip on the widget without stylesheet, then to other widget,
+     // including one without stylesheet (the tooltip will be reused,
+     // but its color must change)
+-    const QWidgetList widgets{wid4, wid1, wid2, wid3, wid4};
+-    const QList<QColor> colors { normalToolTip, QColor("#ae2"), QColor("#f81"), QColor("#0b8"),
+-                                 normalToolTip };
++    const QWidgetList widgets{wid4, wid1, wid2, wid3, wid4, wid5};
++    const QList<QColor> bgcolors { normalToolTipBgColor, QColor("#ae2"), QColor("#f81"),
++                                QColor("#0b8"), normalToolTipBgColor, QColor("#ff0")};
++    const QList<QColor> fgcolors { normalToolTipFgColor, normalToolTipFgColor, normalToolTipFgColor,
++                                normalToolTipFgColor, normalToolTipFgColor, QColor("#f00")};
+ 
+     QWidgetList topLevels;
+     for (int i = 0; i < widgets.size() ; ++i) {
+         QWidget *wid = widgets.at(i);
+-        QColor col = colors.at(i);
++        QColor bgColor = bgcolors.at(i);
++        QColor fgColor = fgcolors.at(i);
+ 
+         QToolTip::showText( QPoint(0,0) , "This is " + wid->objectName(), wid);
+ 
+@@ -1726,9 +1751,18 @@
+                 break;
+             }
+         }
++
+         QVERIFY(tooltip);
+         QTRY_VERIFY(tooltip->isVisible()); // Wait until Roll-Effect is finished (Windows Vista)
+-        QCOMPARE(tooltip->palette().color(tooltip->backgroundRole()), col);
++
++        // If tooltip palette contains empty resolve mask, validate with inherited palette
++        if (!tooltip->palette().resolveMask()) {
++            bgColor = w.palette().color(tooltip->backgroundRole());
++            fgColor = w.palette().color(tooltip->foregroundRole());
++        }
++
++        QCOMPARE(tooltip->palette().color(tooltip->backgroundRole()), bgColor);
++        QCOMPARE(tooltip->palette().color(tooltip->foregroundRole()), fgColor);
+     }
+ 
+     QToolTip::showText( QPoint(0,0) , "This is " + wid3->objectName(), wid3);
